@@ -1,46 +1,44 @@
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.math.BigInteger;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Random;
 
-public class ShellOnDemand {
+public class DeapshogOnDemandAllSeq {
 
-    static int length = 5000;
+    static int length = 1500;
     static int testTry = 100;
 
     static long seed = 0;
 
     static boolean redundDo = true;
 
-    static String fileName = "output";
+    static String fileName = "allSeq";
 
     static ArrayList<Double> compsTable = new ArrayList<>();
-    static ArrayList<Double> swapsTable = new ArrayList<>();
     static ArrayList<Double> varTable = new ArrayList<>();
     static ArrayList<Double> redundTable = new ArrayList<>();
     static ArrayList<Double> depthsTable = new ArrayList<>();
     static ArrayList<ArrayList<Double>> passTable = new ArrayList<>();
-    static ArrayList<Long> overallDepthsTable = new ArrayList<>();
-    static ArrayList<ArrayList<Long>> depthsPerGapTable = new ArrayList<>();
-    static ArrayList<Long> swapsPerGapTable = new ArrayList<>();
+    static ArrayList<Integer> overallDepthsTable = new ArrayList<>();
+    static ArrayList<ArrayList<Integer>> depthsPerGapTable = new ArrayList<>();
 
     static int[] array;
 
-    static int[] seq = {1, 4, 10, 23, 57, 132, 301, 701, 1636};
+    static int[] seq = {1, 6, 0, 0, 0, 0, 0};
 
     static Random rng = new Random(seed);
 
     static long comps = 0;
-    static long swaps = 0;
     static double var;
     static ArrayList<Double> pass = new ArrayList<>();
     static int done = 0;
 
-    static String gapName = "CIURA_1636";
+    static String gapName = "";
 
     static ArrayList<Integer> usedMins = new ArrayList<>();
     static ArrayList<ArrayList<Integer>> usedPairs = new ArrayList<>();
@@ -48,6 +46,10 @@ public class ShellOnDemand {
 
     static double depth = 0;
     static ArrayList<Double> depthsPast = new ArrayList<>();
+
+    static BigInteger totals = new BigInteger("0");
+
+    static long bestComps = Long.MAX_VALUE;
 
     protected static int randInt(int min, int max) {
         return rng.nextInt(max - min) + min;
@@ -75,22 +77,17 @@ public class ShellOnDemand {
         return a > b;
     }
 
-    protected static long shellPass(int gap, int gapIndex) {
+    protected static long deapshogPass(int gap, int gapIndex) {
         long c = 0;
         int[] depths = new int[length - gap > 0 ? length - gap : 0];
-        for (int h = gap, i = h; i < length; i++) {
+        for (int h = gap, i = h; i < length; i++, h = gap) {
             int v = array[i], j = i, d = 1;
-            for (; j >= h && j - h >= 0 && comp(array[j - h], v, c++); j -= h, d++) {
-                swap(array, j, j - h);
-                while (swapsPerGapTable.size() <= gapIndex) swapsPerGapTable.add(0L);
-                swapsPerGapTable.set(gapIndex, swapsPerGapTable.get(gapIndex) + 1);
-                swaps++;
-            }
+            for (; j >= h && j - h >= 0 && comp(array[j - h], v, c++); j -= h, d++, h -= 2, h = h <= 0 ? 1 : h) swap(array, j, j - h);
             depths[i - gap] = d;
-            while (overallDepthsTable.size() <= d) overallDepthsTable.add(0L);
+            while (overallDepthsTable.size() <= d) overallDepthsTable.add(0);
             overallDepthsTable.set(d, overallDepthsTable.get(d) + 1);
             while (depthsPerGapTable.size() <= gapIndex) depthsPerGapTable.add(new ArrayList<>());
-            while (depthsPerGapTable.get(gapIndex).size() <= d) depthsPerGapTable.get(gapIndex).add(0L);
+            while (depthsPerGapTable.get(gapIndex).size() <= d) depthsPerGapTable.get(gapIndex).add(0);
             depthsPerGapTable.get(gapIndex).set(d, depthsPerGapTable.get(gapIndex).get(d) + 1);
         }
         int sum = 0;
@@ -100,26 +97,49 @@ public class ShellOnDemand {
         return c;
     }
 
-    protected static long shell() {
+    protected static long reverseDeapshogPass(int gap, int gapIndex) {
         long c = 0;
-        for (int i = seq.length - 1; i >= 0; i--) c += shellPass(seq[i], i);
+        int[] depths = new int[length - gap > 0 ? length - gap : 0];
+        int end = length - 1;
+        for (int h = gap, i = end - h; i >= 0; i--, h = gap) {
+            int v = array[i], j = i, d = 1;
+            for (; j <= end - h && comp(v, array[j + h], comps++); j += h, h -= 2, h = h <= 0 ? 1 : h) swap(array, j, j + h);
+            depths[i - gap] = d;
+            while (overallDepthsTable.size() <= d) overallDepthsTable.add(0);
+            overallDepthsTable.set(d, overallDepthsTable.get(d) + 1);
+            while (depthsPerGapTable.size() <= gapIndex) depthsPerGapTable.add(new ArrayList<>());
+            while (depthsPerGapTable.get(gapIndex).size() <= d) depthsPerGapTable.get(gapIndex).add(0);
+            depthsPerGapTable.get(gapIndex).set(d, depthsPerGapTable.get(gapIndex).get(d) + 1);
+        }
+        int sum = 0;
+        for (int i = 0; i < depths.length; i++) sum += depths[i];
+        double avgDepth = sum == 0 ? 0 : 1.0 * sum / depths.length;
+        depthsPast.add(avgDepth);
         return c;
     }
 
-    protected static void runShellOnDemand() {
-        System.err.println("Trying to make " + length + " length array with " + testTry + " trials");
+    protected static long deapshog() {
+        long c = 0;
+        boolean f = true;
+        for (int i = seq.length - 1; i >= 0; i--) {
+            if (f) c += deapshogPass(seq[i], i);
+            else c += reverseDeapshogPass(seq[i], i);
+        }
+        return c;
+    }
+
+    protected static void runDeapshogOnDemand() {
+        System.err.println("Trying to make " + length + " length array with " + testTry + " trials: " + genGapName());
         array = new int[length];
         for (int i = 0; i < length; i++) array[i] = i;
         while (done < testTry) {
             for (int j = 0; j < length; j++) swap(array, j, randInt(j, length));
-            swaps = 0;
             usedPairs.clear();
             usedMins.clear();
             redund = 0;
             depthsPast.clear();
-            long get = shell();
+            long get = deapshog();
             compsTable.add((double) get);
-            swapsTable.add((double) swaps);
             redundTable.add(redund);
             passTable.add(new ArrayList<>(depthsPast));
             double avgDepth = 0;
@@ -153,23 +173,41 @@ public class ShellOnDemand {
             pSum /= passTable.size();
             pass.set(i, pSum);
         }
-        swaps = 0;
         for (int a = 0; a < testTry; a++) {
             var += compsTable.get(a);
             redund += redundTable.get(a);
             depth += depthsTable.get(a);
-            swaps += swapsTable.get(a);
         }
         redund /= testTry;
         depth /= testTry;
-        swaps /= testTry;
         var = Math.sqrt(var);
         varTable.add(var);
-        boolean written = false;
+        if (comps <= bestComps) {
+            bestComps = comps;
+            boolean written = false;
+            while (!written) {
+                try {
+                    Path path = FileSystems.getDefault().getPath("DOD-BEST-" + fileName + ".txt");
+                    File output = new File("DOD-BEST-" + fileName + ".txt");
+                    if (!output.getParentFile().exists()) output.getParentFile().mkdirs();
+                    if (!output.createNewFile()) {
+                        //output.delete();
+                        //output.createNewFile();
+                    }
+                    String currentOutput = Files.readString(path);
+                    PrintWriter getWrite = new PrintWriter(output, "UTF-8");
+                    getWrite.append(currentOutput + render());
+                    getWrite.close();
+                    written = true;
+                } catch (IOException e) { e.printStackTrace(); try { Thread.sleep(1000); } catch (Exception e1) {e1.printStackTrace(); } }
+            }
+        }
+        /*boolean written = false;
         while (!written) {
             try {
-                Path path = FileSystems.getDefault().getPath("SOD-" + fileName + ".txt");
-                File output = new File("SOD-" + fileName + ".txt");
+                Path path = FileSystems.getDefault().getPath("DOD-" + fileName + ".txt");
+                File output = new File("DOD-" + fileName + ".txt");
+                if (!output.getParentFile().exists()) output.getParentFile().mkdirs();
                 if (!output.createNewFile()) {
                     //output.delete();
                     //output.createNewFile();
@@ -180,7 +218,7 @@ public class ShellOnDemand {
                 getWrite.close();
                 written = true;
             } catch (IOException e) { e.printStackTrace(); try { Thread.sleep(1000); } catch (Exception e1) {e1.printStackTrace(); } }
-        }
+        }*/
     }
 
     protected static String writeSeqBackwards() {
@@ -201,18 +239,18 @@ public class ShellOnDemand {
         return out;
     }
 
-    protected static String writePerGap() {
-        String out = "PER_GAP = [\n";
+    protected static String writeDepthsPerGap() {
+        String out = "DEPTHS_PER_GAP = [\n";
         for (int i = 0; i < depthsPerGapTable.size(); i++) {
-            out += "  GAP " + seq[i] + ": (DEPTHS = [";
-            for (int j = 0; j < depthsPerGapTable.get(i).size(); j++) out += (depthsPerGapTable.get(i).get(j)) + (j == depthsPerGapTable.get(i).size() - 1 ? "], SWAPS = " + swapsPerGapTable.get(i) + (i == seq.length - 1 ? ")" : "),") + "\n" : ", ");
+            out += "  GAP " + seq[i] + ": [";
+            for (int j = 0; j < depthsPerGapTable.get(i).size(); j++) out += (depthsPerGapTable.get(i).get(j)) + (j == depthsPerGapTable.get(i).size() - 1 ? "]\n" : ", ");
         }
         out += "]";
         return out;
     }
 
     protected static String render() {
-        return gapName + ": (LEN = " + length + ", TRY = " + testTry + ", VAR = " + (long) ((varTable.get(varTable.size() - 1)) / Math.sqrt(testTry)) + ", COMPS_AVG = " + (long) (1.0 * comps / testTry) + (redundDo ? ", SWAPS_AVG = " + swaps + ", REDUND_AVG = " + (long) redund : "") + ", DEPTH_AVG_OF_AVGS = " + depth + ",\n" + writeSeqBackwards() + ",\n" + writePass() + ",\n" + writeOverallDepths() + ",\n" + writePerGap() + ")\n\n";
+        return gapName + ": (LEN = " + length + ", TRY = " + testTry + ", VAR = " + (long) ((varTable.get(varTable.size() - 1)) / Math.sqrt(testTry)) + ", COMPS_AVG = " + (long) (1.0 * comps / testTry) + (redundDo ? ", REDUND_AVG = " + (long) redund : "") + ", DEPTH_AVG_OF_AVGS = " + depth + ",\n" + writeSeqBackwards() + ",\n" + writePass() + ",\n" + writeOverallDepths() + ",\n" + writeDepthsPerGap() + ")\n\n";
     }
 
     protected static String printSeq(String[] a) {
@@ -279,8 +317,46 @@ public class ShellOnDemand {
         if (a != -1) fileName = args[a + 1];
     }
 
+    protected static int gcd(int a, int b) {
+        if (b == 0) return a;
+        return gcd(b, a % b);
+    }
+
+    protected static String genGapName() {
+        String name = "1";
+        for (int i = 1; i < seq.length; i++) name += "-" + seq[i];
+        return name;
+    }
+
+    protected static void recursive(int index, int value) {
+        seq[index] = value;
+        if (index == seq.length - 1) {
+            gapName = genGapName();
+            fileName = "allSeq/" + genGapName();
+            usedPairs.clear();
+            usedMins.clear();
+            compsTable.clear();
+            varTable.clear();
+            redundTable.clear();
+            depthsTable.clear();
+            passTable.clear();
+            overallDepthsTable.clear();
+            depthsPerGapTable.clear();
+            done = 0;
+            comps = 0;
+            //runDeapshogOnDemand();
+            totals = totals.add(BigInteger.ONE);
+        } else for (int a = 2 * value; a < Math.min(length, 3 * value); a++) {
+            //if (index < seq.length - 4 && gcd(value, a) == 1) System.err.println(totals + " " + index + " " + a);
+            //if (gcd(value, a) == 1)
+            recursive(index + 1, a);
+        }
+    }
+
     public static void main(String[] args) {
         argSetup(args);
-        runShellOnDemand();
+        redundDo = false;
+        for (int a = 12; a <= 18; a++) recursive(2, a);
+        System.err.println(totals.toString());
     }
 }

@@ -10,7 +10,7 @@ import java.util.Random;
 
 public class ShellOnDemandAllSeq {
 
-    static int length = 1000;
+    static int length = 8000;
     static int testTry = 100;
 
     static long seed = 0;
@@ -29,7 +29,7 @@ public class ShellOnDemandAllSeq {
 
     static int[] array;
 
-    static int[] seq = {1, 0, 0, 0, 0, 0, 0};
+    static int[] seq = {1, 4, 10, 23, 57, 0, 0, 0, 0};
 
     static Random rng = new Random(seed);
 
@@ -177,7 +177,7 @@ public class ShellOnDemandAllSeq {
                 } catch (IOException e) { e.printStackTrace(); try { Thread.sleep(1000); } catch (Exception e1) {e1.printStackTrace(); } }
             }
         }
-        boolean written = false;
+        /*boolean written = false;
         while (!written) {
             try {
                 Path path = FileSystems.getDefault().getPath("SOD-" + fileName + ".txt");
@@ -193,7 +193,7 @@ public class ShellOnDemandAllSeq {
                 getWrite.close();
                 written = true;
             } catch (IOException e) { e.printStackTrace(); try { Thread.sleep(1000); } catch (Exception e1) {e1.printStackTrace(); } }
-        }
+        }*/
     }
 
     protected static String writeSeqBackwards() {
@@ -243,7 +243,7 @@ public class ShellOnDemandAllSeq {
         int a = argsContain(args, "--length");
         if (a != -1) {
             try {
-                length = (int) Integer.parseInt(args[a + 1]);
+                length = Integer.parseInt(args[a + 1]);
                 if (length <= 0) throw new NumberFormatException();
             } catch (NumberFormatException e) {
                 System.err.println("PROBLEM PARSING LENGTH: " + args[a + 1]);
@@ -292,6 +292,11 @@ public class ShellOnDemandAllSeq {
         if (a != -1) fileName = args[a + 1];
     }
 
+    protected static int gcd(int a, int b) {
+        if (b == 0) return a;
+        return gcd(b, a % b);
+    }
+
     protected static String genGapName() {
         String name = "1";
         for (int i = 1; i < seq.length; i++) name += "-" + seq[i];
@@ -314,15 +319,18 @@ public class ShellOnDemandAllSeq {
             depthsPerGapTable.clear();
             done = 0;
             comps = 0;
-            runShellOnDemand();
+            //runShellOnDemand();
             totals = totals.add(BigInteger.ONE);
-        } else for (int a = 2 * value + 1; a < Math.min(length, 3 * value); a++) recursive(index + 1, a);
+        } else for (int a = (int) (2.2d * value); a < Math.min(length, 2.4d * value); a++) {
+            if (index < seq.length - 4 && gcd(value, a) == 1) System.err.println(totals + " " + index + " " + a);
+            if (gcd(value, a) == 1) recursive(index + 1, a);
+        }
     }
 
     public static void main(String[] args) {
         argSetup(args);
         redundDo = false;
-        for (int a = 3; a < 7; a++) recursive(1, a);
+        for (int a = (int) (2.2 * 57); a <= 2.4 * 57; a++) recursive(5, a);
         System.err.println(totals.toString());
     }
 }
