@@ -5,6 +5,8 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Random;
 
 public class ShellOnDemand {
@@ -20,7 +22,6 @@ public class ShellOnDemand {
 
     static ArrayList<Double> compsTable = new ArrayList<>();
     static ArrayList<Double> swapsTable = new ArrayList<>();
-    static ArrayList<Double> varTable = new ArrayList<>();
     static ArrayList<Double> redundTable = new ArrayList<>();
     static ArrayList<Double> depthsTable = new ArrayList<>();
     static ArrayList<ArrayList<Double>> passTable = new ArrayList<>();
@@ -32,7 +33,7 @@ public class ShellOnDemand {
 
     static int[] seq = {1, 4, 10, 23, 57, 132, 301, 701, 1636};
 
-    static Random rng = new Random(seed);
+    static Random rng;
 
     static long comps = 0;
     static long swaps = 0;
@@ -42,8 +43,7 @@ public class ShellOnDemand {
 
     static String gapName = "CIURA_1636";
 
-    static ArrayList<Integer> usedMins = new ArrayList<>();
-    static ArrayList<ArrayList<Integer>> usedPairs = new ArrayList<>();
+    static HashMap<Integer, HashSet<Integer>> usedPairsMap = new HashMap<>();
     static double redund = 0;
 
     static double depth = 0;
@@ -61,17 +61,14 @@ public class ShellOnDemand {
 
     protected static boolean comp(int a, int b, long c) {
         if (!redundDo) return a > b;
-        int[] pair = new int[] {Math.min(a, b), Math.max(a, b)};
-        int minI = usedMins.indexOf(pair[0]);
-        if (minI != -1) {
-            if (usedPairs.get(minI).contains(pair[1])) redund++;
-            else usedPairs.get(minI).add(pair[1]);
-        } else {
-            usedMins.add(pair[0]);
-            ArrayList<Integer> add = new ArrayList<>();
-            add.add(pair[1]);
-            usedPairs.add(add);
-        }
+        int min = Math.min(a, b);
+        int max = Math.max(a, b);
+        HashSet<Integer> partners = usedPairsMap.get(min);
+        if (partners == null) {
+            partners = new HashSet<>();
+            partners.add(max);
+            usedPairsMap.put(min, partners);
+        } else if (!partners.add(max)) redund++;
         return a > b;
     }
 
@@ -113,8 +110,7 @@ public class ShellOnDemand {
         while (done < testTry) {
             for (int j = 0; j < length; j++) swap(array, j, randInt(j, length));
             swaps = 0;
-            usedPairs.clear();
-            usedMins.clear();
+            usedPairsMap.clear();
             redund = 0;
             depthsPast.clear();
             long get = shell();
@@ -164,9 +160,9 @@ public class ShellOnDemand {
         depth /= testTry;
         swaps /= testTry;
         var = Math.sqrt(var);
-        varTable.add(var);
         boolean written = false;
-        while (!written) {
+        int retries = 0;
+        while (!written && retries < 10) {
             try {
                 Path path = FileSystems.getDefault().getPath("SOD-" + fileName + ".txt");
                 File output = new File("SOD-" + fileName + ".txt");
@@ -179,46 +175,88 @@ public class ShellOnDemand {
                 getWrite.append(currentOutput + render());
                 getWrite.close();
                 written = true;
-            } catch (IOException e) { e.printStackTrace(); try { Thread.sleep(1000); } catch (Exception e1) {e1.printStackTrace(); } }
+            } catch (IOException e) {
+                e.printStackTrace();
+                retries++;
+                try { Thread.sleep(1000); } catch (Exception e1) {e1.printStackTrace(); }
+            }
+        }
+        if (!written) {
+            System.err.println("Failed to write output after 10 retries. Printing to err instead.");
+            try { Thread.sleep(1000); } catch (Exception e) {e.printStackTrace(); }
+            System.err.println("\n\n" + render());
         }
     }
 
     protected static String writeSeqBackwards() {
-        String out = "SEQ = [";
-        for (int i = seq.length - 1; i >= 0; i--) out += (seq[i]) + (i == 0 ? "]" : ", ");
-        return out;
+        StringBuilder sb = new StringBuilder("SEQ = [");
+        for (int i = seq.length - 1; i >= 0; i--) {
+            sb.append(seq[i]);
+            sb.append(i == 0 ? "]" : ", ");
+        }
+        return sb.toString();
     }
 
     protected static String writePass() {
-        String out = "PASS_AVG = [";
-        for (int i = 0; i < pass.size(); i++) out += (pass.get(i)) + (i == pass.size() - 1 ? "]" : ", ");
-        return out;
+        StringBuilder sb = new StringBuilder("PASS_AVG = [");
+        for (int i = 0; i < pass.size(); i++) {
+            sb.append(pass.get(i));
+            sb.append(i == pass.size() - 1 ? "]" : ", ");
+        }
+        return sb.toString();
     }
 
     protected static String writeOverallDepths() {
-        String out = "OVERALL_DEPTHS = [";
-        for (int i = 0; i < overallDepthsTable.size(); i++) out += (overallDepthsTable.get(i)) + (i == overallDepthsTable.size() - 1 ? "]" : ", ");
-        return out;
+        StringBuilder sb = new StringBuilder("OVERALL_DEPTHS = [");
+        for (int i = 0; i < overallDepthsTable.size(); i++) {
+            sb.append(overallDepthsTable.get(i));
+            sb.append(i == overallDepthsTable.size() - 1 ? "]" : ", ");
+        }
+        return sb.toString();
     }
 
     protected static String writePerGap() {
-        String out = "PER_GAP = [\n";
+        StringBuilder sb = new StringBuilder("PER_GAP = [\n");
         for (int i = 0; i < depthsPerGapTable.size(); i++) {
-            out += "  GAP " + seq[i] + ": (DEPTHS = [";
-            for (int j = 0; j < depthsPerGapTable.get(i).size(); j++) out += (depthsPerGapTable.get(i).get(j)) + (j == depthsPerGapTable.get(i).size() - 1 ? "], SWAPS = " + swapsPerGapTable.get(i) + (i == seq.length - 1 ? ")" : "),") + "\n" : ", ");
+            sb.append("  GAP ").append(seq[i]).append(": (DEPTHS = [");
+            for (int j = 0; j < depthsPerGapTable.get(i).size(); j++) {
+                sb.append(depthsPerGapTable.get(i).get(j));
+                if (j == depthsPerGapTable.get(i).size() - 1) {
+                    sb.append("], SWAPS = ").append(swapsPerGapTable.get(i));
+                    sb.append(i == seq.length - 1 ? ")\n" : "),\n");
+                } else sb.append(", ");
+            }
         }
-        out += "]";
-        return out;
+        sb.append("]");
+        return sb.toString();
     }
 
     protected static String render() {
-        return gapName + ": (LEN = " + length + ", TRY = " + testTry + ", VAR = " + (long) ((varTable.get(varTable.size() - 1)) / Math.sqrt(testTry)) + ", COMPS_AVG = " + (long) (1.0 * comps / testTry) + (redundDo ? ", SWAPS_AVG = " + swaps + ", REDUND_AVG = " + (long) redund : "") + ", DEPTH_AVG_OF_AVGS = " + depth + ",\n" + writeSeqBackwards() + ",\n" + writePass() + ",\n" + writeOverallDepths() + ",\n" + writePerGap() + ")\n\n";
+        long variance = (long) (var / Math.sqrt(testTry));
+        long avgComps = (long) (1.0 * comps / testTry);
+        StringBuilder sb = new StringBuilder();
+        sb.append(gapName).append(": (");
+        sb.append("LEN = ").append(length).append(", ");
+        sb.append("TRY = ").append(testTry).append(", ");
+        sb.append("VAR = ").append(variance).append(", ");
+        sb.append("COMPS_AVG = ").append(avgComps).append(", ");
+        sb.append("SWAPS_AVG = ").append(swaps);
+        if (redundDo) sb.append(", REDUND_AVG = ").append((long) redund);
+        sb.append(", DEPTH_AVG_OF_AVGS = ").append(depth).append(",\n");
+        sb.append(writeSeqBackwards()).append(",\n");
+        sb.append(writePass()).append(",\n");
+        sb.append(writeOverallDepths()).append(",\n");
+        sb.append(writePerGap()).append(")\n\n");
+        return sb.toString();
     }
 
     protected static String printSeq(String[] a) {
-        String out = "[";
-        for (int i = 0; i < a.length; i++) out += a[i] + (i == a.length - 1 ? "]" : ", ");
-        return out;
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < a.length; i++) {
+            sb.append(a[i]);
+            sb.append(i == a.length - 1 ? "]" : ", ");
+        }
+        return sb.toString();
     }
 
     protected static int argsContain(String[] args, String match) {
@@ -281,6 +319,7 @@ public class ShellOnDemand {
 
     public static void main(String[] args) {
         argSetup(args);
+        rng = new Random(seed);
         runShellOnDemand();
     }
 }
